@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Flappy Jollibee 完全版</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: url('background.jpg') no-repeat center center / cover;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+      background: transparent;
+    }
+    #restartButton {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 40px;
+      font-size: 24px;
+      background-color: #f44336;
+      color: white;
+      border: none;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<button id="restartButton">リスタート</button>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const restartButton = document.getElementById('restartButton');
+
+let canvasWidth = window.innerWidth;
+let canvasHeight = window.innerHeight;
+canvas.width = canvasWidth;
+canvas.height = canvasHeight;
+
+let jollibeeY = canvasHeight / 2;
+let velocity = 0;
+const gravity = 0.4;
+const jumpStrength = -8;
+let gameOver = false;
+let gameStarted = false;
+let score = 0;
+const goalScore = 10;
+let clear = false;
+
+const jollibeeImg = new Image();
+jollibeeImg.src = 'jollibee.png';
+const jollibeeNaturalWidth = 422;
+const jollibeeNaturalHeight = 633;
+const jollibeeAspectRatio = jollibeeNaturalHeight / jollibeeNaturalWidth;
+const jollibeeSize = Math.min(canvasWidth, canvasHeight) / 10;
+
+const jollibeeWidth = jollibeeSize;
+const jollibeeHeight = jollibeeSize * jollibeeAspectRatio;
+
+let pipes = [];
+const pipeWidth = jollibeeSize * 1.2;
+const pipeGap = jollibeeSize * 3;
+const pipeSpeed = 2;
+
+function spawnPipe() {
+  const topHeight = Math.random() * (canvasHeight - pipeGap - jollibeeSize * 2) + jollibeeSize;
+  pipes.push({ x: canvasWidth, topHeight, counted: false });
+}
+
+function drawJollibee() {
+  ctx.drawImage(jollibeeImg, canvasWidth * 0.2, jollibeeY, jollibeeWidth, jollibeeHeight);
+}
+
+function drawPipes() {
+  ctx.fillStyle = 'green';
+  pipes.forEach(pipe => {
+    ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+    ctx.fillRect(pipe.x, pipe.topHeight + pipeGap, pipeWidth, canvasHeight - pipe.topHeight - pipeGap);
+  });
+}
+
+function drawText(text, size, y) {
+  ctx.fillStyle = 'white';
+  ctx.font = `${size}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(text, canvasWidth / 2, y);
+}
+
+function checkCollision() {
+  for (let pipe of pipes) {
+    if (
+      canvasWidth * 0.2 + jollibeeWidth > pipe.x &&
+      canvasWidth * 0.2 < pipe.x + pipeWidth &&
+      (jollibeeY < pipe.topHeight || jollibeeY + jollibeeHeight > pipe.topHeight + pipeGap)
+    ) {
+      gameOver = true;
+    }
+    if (!pipe.counted && pipe.x + pipeWidth < canvasWidth * 0.2) {
+      score++;
+      pipe.counted = true;
+    }
+  }
+  if (jollibeeY + jollibeeHeight > canvasHeight || jollibeeY < 0) {
+    gameOver = true;
+  }
+}
+
+function update() {
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  if (!gameStarted) {
+    drawText('Flappy Jollibee', canvasHeight * 0.08, canvasHeight * 0.3);
+    drawText('画面をタップしてスタート', canvasHeight * 0.04, canvasHeight * 0.4);
+    requestAnimationFrame(update);
+    return;
+  }
+
+  if (!gameOver && !clear) {
+    velocity += gravity;
+    jollibeeY += velocity;
+
+    pipes.forEach(pipe => pipe.x -= pipeSpeed);
+    if (pipes.length === 0 || pipes[pipes.length - 1].x < canvasWidth - canvasWidth / 2) {
+      spawnPipe();
+    }
+    if (pipes[0] && pipes[0].x + pipeWidth < 0) {
+      pipes.shift();
+    }
+
+    checkCollision();
+  }
+
+  drawJollibee();
+  drawPipes();
+  drawText(`スコア: ${score}/${goalScore}`, canvasHeight * 0.04, canvasHeight * 0.1);
+
+  if (gameOver) {
+    drawText('GAME OVER', canvasHeight * 0.06, canvasHeight / 2);
+    showRestartButton();
+  } else if (score >= goalScore && !clear) {
+    clear = true;
+    drawText('🎉 マニラで待ってるぞ！🎉', canvasHeight * 0.06, canvasHeight / 2);
+    showRestartButton();
+  }
+
+  requestAnimationFrame(update);
+}
+
+function jump() {
+  if (!gameStarted) {
+    gameStarted = true;
+    pipes = [];
+    score = 0;
+  }
+
+  if (!gameOver && !clear) {
+    velocity = jumpStrength;
+  }
+}
+
+function showRestartButton() {
+  restartButton.style.display = 'block';
+}
+
+function hideRestartButton() {
+  restartButton.style.display = 'none';
+}
+
+function restartGame() {
+  jollibeeY = canvasHeight / 2;
+  velocity = 0;
+  pipes = [];
+  score = 0;
+  gameOver = false;
+  clear = false;
+  gameStarted = false;
+  hideRestartButton();
+}
+
+// イベント設定
+canvas.addEventListener('touchstart', jump);
+restartButton.addEventListener('click', restartGame);
+
+jollibeeImg.onload = () => {
+  update();
+};
+
+window.addEventListener('resize', () => {
+  canvasWidth = window.innerWidth;
+  canvasHeight = window.innerHeight;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+});
+</script>
+</body>
+</html>
