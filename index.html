@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>Flappy Jollibee 改良版</title>
+  <meta charset="UTF-8" />
+  <title>Flappy Jollibee 完全版</title>
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
       background: url('background.jpg') no-repeat center center / cover;
-      overflow: hidden;
-      user-select: none;
-      touch-action: none;
+      overflow: hidden; touch-action: none; user-select: none;
     }
     canvas {
       display: block;
@@ -30,6 +26,7 @@
       color: white;
       border: none;
       border-radius: 12px;
+      z-index: 10;
     }
   </style>
 </head>
@@ -42,16 +39,14 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const restartButton = document.getElementById('restartButton');
 
-let canvasWidth = window.innerWidth;
-let canvasHeight = Math.min(window.innerHeight, 600); // スマホでは600px制限
-canvas.width = canvasWidth;
-canvas.height = canvasHeight;
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
 function isMobile() {
   return /Mobi|Android/i.test(navigator.userAgent);
 }
 
-let jollibeeY = canvasHeight / 2;
+let jollibeeY = canvas.height / 2;
 let velocity = 0;
 const gravity = isMobile() ? 0.6 : 0.4;
 const jumpStrength = isMobile() ? -10 : -8;
@@ -63,33 +58,64 @@ let clear = false;
 
 const jollibeeImg = new Image();
 jollibeeImg.src = 'jollibee.png';
-const jollibeeNaturalWidth = 422;
-const jollibeeNaturalHeight = 633;
-const jollibeeAspectRatio = jollibeeNaturalHeight / jollibeeNaturalWidth;
-const jollibeeSize = Math.min(canvasWidth, canvasHeight) / 10;
 
+const jollibeeSize = Math.min(canvas.width, canvas.height) / 10;
 const jollibeeWidth = jollibeeSize;
-const jollibeeHeight = jollibeeSize * jollibeeAspectRatio;
+const jollibeeHeight = jollibeeSize * 1.5;
 
 let pipes = [];
+let items = [];
+let floatingTexts = [];
+
 const pipeWidth = jollibeeSize * 1.2;
 const pipeGap = jollibeeSize * 3;
 const pipeSpeed = 2;
 
-function spawnPipe() {
-  const topHeight = Math.random() * (canvasHeight - pipeGap - jollibeeSize * 2) + jollibeeSize;
-  pipes.push({ x: canvasWidth, topHeight, counted: false });
-}
+const emojis = [
+  { emoji: '🍗', value: 100 },
+  { emoji: '🍝', value: 5 },
+  { emoji: '🍔', value: -200 },
+];
 
+function spawnPipe() {
+  const topHeight = Math.random() * (canvas.height - pipeGap - jollibeeSize * 2) + jollibeeSize;
+  pipes.push({ x: canvas.width, topHeight, counted: false });
+
+  if (Math.random() < 0.3) {
+    const item = emojis[Math.floor(Math.random() * emojis.length)];
+    items.push({
+      x: canvas.width,
+      y: topHeight + pipeGap / 2,
+      emoji: item.emoji,
+      value: item.value,
+      collected: false
+    });
+  }
+}
 function drawJollibee() {
-  ctx.drawImage(jollibeeImg, canvasWidth * 0.2, jollibeeY, jollibeeWidth, jollibeeHeight);
+  ctx.drawImage(jollibeeImg, canvas.width * 0.2, jollibeeY, jollibeeWidth, jollibeeHeight);
 }
 
 function drawPipes() {
   ctx.fillStyle = 'green';
   pipes.forEach(pipe => {
     ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
-    ctx.fillRect(pipe.x, pipe.topHeight + pipeGap, pipeWidth, canvasHeight - pipe.topHeight - pipeGap);
+    ctx.fillRect(pipe.x, pipe.topHeight + pipeGap, pipeWidth, canvas.height - pipe.topHeight - pipeGap);
+  });
+}
+
+function drawItems() {
+  ctx.font = `${jollibeeSize}px sans-serif`;
+  items.forEach(item => {
+    ctx.fillText(item.emoji, item.x, item.y);
+  });
+}
+
+function drawFloatingTexts() {
+  ctx.font = `${jollibeeSize * 0.6}px sans-serif`;
+  ctx.fillStyle = 'yellow';
+  floatingTexts.forEach(text => {
+    ctx.fillText(text.text, text.x, text.y);
   });
 }
 
@@ -97,36 +123,57 @@ function drawText(text, size, y) {
   ctx.fillStyle = 'white';
   ctx.font = `${size}px sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(text, canvasWidth / 2, y);
+  ctx.fillText(text, canvas.width / 2, y);
 }
 
 function checkCollision() {
-  const collisionPadding = 10; // 判定をゆるめる
+  const x = canvas.width * 0.2;
+  const padding = 10;
   for (let pipe of pipes) {
     if (
-      canvasWidth * 0.2 + jollibeeWidth - collisionPadding > pipe.x &&
-      canvasWidth * 0.2 + collisionPadding < pipe.x + pipeWidth &&
-      (jollibeeY + collisionPadding < pipe.topHeight ||
-       jollibeeY + jollibeeHeight - collisionPadding > pipe.topHeight + pipeGap)
+      x + jollibeeWidth - padding > pipe.x &&
+      x + padding < pipe.x + pipeWidth &&
+      (jollibeeY + padding < pipe.topHeight || jollibeeY + jollibeeHeight - padding > pipe.topHeight + pipeGap)
     ) {
       gameOver = true;
     }
-    if (!pipe.counted && pipe.x + pipeWidth < canvasWidth * 0.2) {
+    if (!pipe.counted && pipe.x + pipeWidth < x) {
       score++;
       pipe.counted = true;
     }
   }
-  if (jollibeeY + jollibeeHeight > canvasHeight || jollibeeY < 0) {
+
+  items.forEach(item => {
+    if (
+      !item.collected &&
+      x + jollibeeWidth > item.x &&
+      x < item.x + jollibeeSize &&
+      jollibeeY < item.y &&
+      jollibeeY + jollibeeHeight > item.y - jollibeeSize
+    ) {
+      score += item.value;
+      item.collected = true;
+      floatingTexts.push({
+        text: (item.value > 0 ? "+" : "") + item.value + "pt",
+        x: item.x,
+        y: item.y,
+        alpha: 1.0
+      });
+    }
+  });
+
+  if (jollibeeY + jollibeeHeight > canvas.height || jollibeeY < 0) {
     gameOver = true;
   }
 }
 
 function update() {
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (!gameStarted) {
-    drawText('Flappy Jollibee', canvasHeight * 0.08, canvasHeight * 0.3);
-    drawText('画面をタップしてスタート', canvasHeight * 0.04, canvasHeight * 0.4);
+    drawText('Flappy Jollibee 🍗🍝🍔', canvas.height * 0.06, canvas.height * 0.25);
+    drawText('🍗 +100  🍝 +5  🍔 -200', canvas.height * 0.035, canvas.height * 0.33);
+    drawText('画面タップでスタート', canvas.height * 0.035, canvas.height * 0.4);
     requestAnimationFrame(update);
     return;
   }
@@ -136,26 +183,35 @@ function update() {
     jollibeeY += velocity;
 
     pipes.forEach(pipe => pipe.x -= pipeSpeed);
-    if (pipes.length === 0 || pipes[pipes.length - 1].x < canvasWidth - canvasWidth / 2) {
+    items.forEach(item => item.x -= pipeSpeed);
+
+    if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - canvas.width / 2) {
       spawnPipe();
     }
-    if (pipes[0] && pipes[0].x + pipeWidth < 0) {
-      pipes.shift();
-    }
+
+    pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
+    items = items.filter(item => item.x + jollibeeSize > 0 && !item.collected);
+    floatingTexts.forEach(text => {
+      text.y -= 1;
+      text.alpha -= 0.02;
+    });
+    floatingTexts = floatingTexts.filter(text => text.alpha > 0);
 
     checkCollision();
   }
 
   drawJollibee();
   drawPipes();
-  drawText(`スコア: ${score}/${goalScore}`, canvasHeight * 0.04, canvasHeight * 0.1);
+  drawItems();
+  drawFloatingTexts();
+  drawText(`スコア: ${score} pt`, canvas.height * 0.035, canvas.height * 0.08);
 
   if (gameOver) {
-    drawText('GAME OVER', canvasHeight * 0.06, canvasHeight / 2);
+    drawText('GAME OVER', canvas.height * 0.06, canvas.height / 2);
     showRestartButton();
   } else if (score >= goalScore && !clear) {
     clear = true;
-    drawText('🎉 マニラで待ってるぞ！🎉', canvasHeight * 0.06, canvasHeight / 2);
+    drawText('🎉 マニラで待ってるぞ！🎉', canvas.height * 0.06, canvas.height / 2);
     showRestartButton();
   }
 
@@ -166,6 +222,8 @@ function jump() {
   if (!gameStarted) {
     gameStarted = true;
     pipes = [];
+    items = [];
+    floatingTexts = [];
     score = 0;
   }
 
@@ -177,15 +235,15 @@ function jump() {
 function showRestartButton() {
   restartButton.style.display = 'block';
 }
-
 function hideRestartButton() {
   restartButton.style.display = 'none';
 }
-
 function restartGame() {
-  jollibeeY = canvasHeight / 2;
+  jollibeeY = canvas.height / 2;
   velocity = 0;
   pipes = [];
+  items = [];
+  floatingTexts = [];
   score = 0;
   gameOver = false;
   clear = false;
@@ -193,20 +251,12 @@ function restartGame() {
   hideRestartButton();
 }
 
-// イベント設定
 canvas.addEventListener('touchstart', jump);
 restartButton.addEventListener('click', restartGame);
-
 jollibeeImg.onload = () => {
   update();
 };
-
-window.addEventListener('resize', () => {
-  canvasWidth = window.innerWidth;
-  canvasHeight = Math.min(window.innerHeight);
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
-});
 </script>
 </body>
 </html>
+
