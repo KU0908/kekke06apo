@@ -2,13 +2,15 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Flappy Jollibee ゴール版</title>
+  <title>Flappy Jollibee 完全版</title>
   <style>
     html, body {
       margin: 0; padding: 0;
       width: 100%; height: 100%;
       background: #70c5ce;
-      overflow: hidden; touch-action: none; user-select: none;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
     }
     canvas {
       display: block;
@@ -44,9 +46,9 @@ function isMobile() {
   return /Mobi|Android/i.test(navigator.userAgent);
 }
 
-// 基本設定
+// 設定
 let scrollX = 0;
-const worldWidth = 5000; // ゴールまでの距離
+const worldWidth = 2000; // ← ゴールまでの距離
 const jollibee = {
   x: 100,
   y: canvas.height / 2,
@@ -82,19 +84,19 @@ handImg.src = "hand.png";
 const goalImg = new Image();
 goalImg.src = "jollibee-store.png";
 
-// アイテム
+const startImg = new Image();
+startImg.src = "start-screen.png";
+
 const emojis = [
   { emoji: '🍗', value: 100 },
   { emoji: '🍝', value: 5 },
   { emoji: '🍔', value: -200 },
 ];
-
 function spawnPipe() {
   const topHeight = Math.random() * (canvas.height - pipeGap - 100) + 50;
   pipes.push({ x: worldWidth, topHeight, counted: false });
 
-  // アイテム出現
-  if (Math.random() < 0.3) {
+  if (Math.random() < 0.5) {
     const item = emojis[Math.floor(Math.random() * emojis.length)];
     items.push({
       x: worldWidth,
@@ -104,6 +106,10 @@ function spawnPipe() {
       collected: false
     });
   }
+}
+
+function drawStartScreen() {
+  ctx.drawImage(startImg, 0, 0, canvas.width, canvas.height);
 }
 
 function drawBackground() {
@@ -158,7 +164,6 @@ function drawText(text, size, y) {
 function checkCollision() {
   if (clear) return;
 
-  // 壁
   for (let pipe of pipes) {
     const x = pipe.x - scrollX;
     if (
@@ -170,7 +175,6 @@ function checkCollision() {
     }
   }
 
-  // アイテム
   items.forEach(item => {
     if (
       !item.collected &&
@@ -191,12 +195,10 @@ function checkCollision() {
     }
   });
 
-  // 地面 or 天井
   if (jollibee.y < 0 || jollibee.y + jollibee.height > canvas.height) {
     gameOver = true;
   }
 
-  // ゴール判定
   if (jollibee.x + scrollX >= worldWidth - 200) {
     clear = true;
   }
@@ -204,15 +206,15 @@ function checkCollision() {
 
 function update() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBackground();
 
   if (!gameStarted) {
-    drawText("Flappy Jollibee 🏁", 48, canvas.height * 0.3);
-    drawText("ゴールのJollibee店舗を目指せ！", 24, canvas.height * 0.4);
-    drawText("画面をタップしてスタート", 20, canvas.height * 0.48);
+    drawStartScreen();
+    drawText("画面タップでスタート", 24, canvas.height * 0.9);
     requestAnimationFrame(update);
     return;
   }
+
+  drawBackground();
 
   if (!gameOver && !clear) {
     jollibee.velocity += gravity;
@@ -228,12 +230,10 @@ function update() {
 
     checkCollision();
 
-    if (pipes.length === 0 || pipes[pipes.length - 1].x - scrollX < canvas.width / 2) {
+    if (pipes.length === 0 || pipes[pipes.length - 1].x - scrollX < canvas.width / 3) {
       spawnPipe();
     }
 
-    pipes.filter(pipe => pipe.x - scrollX + pipeWidth > 0);
-    items.filter(item => item.x - scrollX + 40 > 0);
     floatingTexts.filter(text => text.alpha > 0);
   }
 
@@ -287,7 +287,6 @@ function restartGame() {
 
 canvas.addEventListener("touchstart", jump);
 restartButton.addEventListener("click", restartGame);
-
 jollibeeImg.onload = () => update();
 </script>
 </body>
