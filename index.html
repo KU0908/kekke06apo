@@ -2,17 +2,16 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Flappy Jollibee 完全版</title>
+  <title>Flappy Jollibee ゴール版</title>
   <style>
     html, body {
       margin: 0; padding: 0;
       width: 100%; height: 100%;
-      background: url('background.jpg') no-repeat center center / cover;
+      background: #70c5ce;
       overflow: hidden; touch-action: none; user-select: none;
     }
     canvas {
       display: block;
-      background: transparent;
     }
     #restartButton {
       display: none;
@@ -35,42 +34,55 @@
 <button id="restartButton">リスタート</button>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const restartButton = document.getElementById('restartButton');
-
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+const restartButton = document.getElementById("restartButton");
 function isMobile() {
   return /Mobi|Android/i.test(navigator.userAgent);
 }
 
-let jollibeeY = canvas.height / 2;
-let velocity = 0;
+// 基本設定
+let scrollX = 0;
+const worldWidth = 5000; // ゴールまでの距離
+const jollibee = {
+  x: 100,
+  y: canvas.height / 2,
+  width: 60,
+  height: 90,
+  velocity: 0,
+};
 const gravity = isMobile() ? 0.6 : 0.4;
 const jumpStrength = isMobile() ? -10 : -8;
 let gameOver = false;
 let gameStarted = false;
-let score = 0;
-const goalScore = 10;
 let clear = false;
+let score = 0;
 
-const jollibeeImg = new Image();
-jollibeeImg.src = 'jollibee.png';
+const pipes = [];
+const items = [];
+const floatingTexts = [];
 
-const jollibeeSize = Math.min(canvas.width, canvas.height) / 10;
-const jollibeeWidth = jollibeeSize;
-const jollibeeHeight = jollibeeSize * 1.5;
-
-let pipes = [];
-let items = [];
-let floatingTexts = [];
-
-const pipeWidth = jollibeeSize * 1.2;
-const pipeGap = jollibeeSize * 3;
+const pipeGap = 180;
+const pipeWidth = 80;
 const pipeSpeed = 2;
 
+// 画像読み込み
+const jollibeeImg = new Image();
+jollibeeImg.src = "jollibee.png";
+
+const backgroundImg = new Image();
+backgroundImg.src = "background.jpg";
+
+const handImg = new Image();
+handImg.src = "hand.png";
+
+const goalImg = new Image();
+goalImg.src = "jollibee-store.png";
+
+// アイテム
 const emojis = [
   { emoji: '🍗', value: 100 },
   { emoji: '🍝', value: 5 },
@@ -78,13 +90,14 @@ const emojis = [
 ];
 
 function spawnPipe() {
-  const topHeight = Math.random() * (canvas.height - pipeGap - jollibeeSize * 2) + jollibeeSize;
-  pipes.push({ x: canvas.width, topHeight, counted: false });
+  const topHeight = Math.random() * (canvas.height - pipeGap - 100) + 50;
+  pipes.push({ x: worldWidth, topHeight, counted: false });
 
+  // アイテム出現
   if (Math.random() < 0.3) {
     const item = emojis[Math.floor(Math.random() * emojis.length)];
     items.push({
-      x: canvas.width,
+      x: worldWidth,
       y: topHeight + pipeGap / 2,
       emoji: item.emoji,
       value: item.value,
@@ -92,31 +105,47 @@ function spawnPipe() {
     });
   }
 }
+
+function drawBackground() {
+  ctx.drawImage(backgroundImg, -scrollX % canvas.width, 0, canvas.width, canvas.height);
+  ctx.drawImage(backgroundImg, canvas.width - scrollX % canvas.width, 0, canvas.width, canvas.height);
+}
+
 function drawJollibee() {
-  ctx.drawImage(jollibeeImg, canvas.width * 0.2, jollibeeY, jollibeeWidth, jollibeeHeight);
+  ctx.drawImage(jollibeeImg, jollibee.x, jollibee.y, jollibee.width, jollibee.height);
 }
 
 function drawPipes() {
-  ctx.fillStyle = 'green';
   pipes.forEach(pipe => {
-    ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
-    ctx.fillRect(pipe.x, pipe.topHeight + pipeGap, pipeWidth, canvas.height - pipe.topHeight - pipeGap);
+    const drawX = pipe.x - scrollX;
+    ctx.drawImage(handImg, drawX, 0, pipeWidth, pipe.topHeight);
+    ctx.save();
+    ctx.scale(1, -1);
+    ctx.drawImage(handImg, drawX, -(pipe.topHeight + pipeGap + (canvas.height - pipe.topHeight - pipeGap)), pipeWidth, canvas.height - pipe.topHeight - pipeGap);
+    ctx.restore();
   });
 }
 
 function drawItems() {
-  ctx.font = `${jollibeeSize}px sans-serif`;
+  ctx.font = `40px sans-serif`;
   items.forEach(item => {
-    ctx.fillText(item.emoji, item.x, item.y);
+    ctx.fillText(item.emoji, item.x - scrollX, item.y);
   });
 }
 
 function drawFloatingTexts() {
-  ctx.font = `${jollibeeSize * 0.6}px sans-serif`;
-  ctx.fillStyle = 'yellow';
+  ctx.font = `24px sans-serif`;
   floatingTexts.forEach(text => {
-    ctx.fillText(text.text, text.x, text.y);
+    ctx.globalAlpha = text.alpha;
+    ctx.fillStyle = text.value > 0 ? "yellow" : "red";
+    ctx.fillText(text.text, text.x - scrollX, text.y);
   });
+  ctx.globalAlpha = 1.0;
+}
+
+function drawGoal() {
+  const goalX = worldWidth - 200;
+  ctx.drawImage(goalImg, goalX - scrollX, canvas.height - 200, 200, 150);
 }
 
 function drawText(text, size, y) {
@@ -127,29 +156,28 @@ function drawText(text, size, y) {
 }
 
 function checkCollision() {
-  const x = canvas.width * 0.2;
-  const padding = 10;
+  if (clear) return;
+
+  // 壁
   for (let pipe of pipes) {
+    const x = pipe.x - scrollX;
     if (
-      x + jollibeeWidth - padding > pipe.x &&
-      x + padding < pipe.x + pipeWidth &&
-      (jollibeeY + padding < pipe.topHeight || jollibeeY + jollibeeHeight - padding > pipe.topHeight + pipeGap)
+      jollibee.x + jollibee.width > x &&
+      jollibee.x < x + pipeWidth &&
+      (jollibee.y < pipe.topHeight || jollibee.y + jollibee.height > pipe.topHeight + pipeGap)
     ) {
       gameOver = true;
     }
-    if (!pipe.counted && pipe.x + pipeWidth < x) {
-      score++;
-      pipe.counted = true;
-    }
   }
 
+  // アイテム
   items.forEach(item => {
     if (
       !item.collected &&
-      x + jollibeeWidth > item.x &&
-      x < item.x + jollibeeSize &&
-      jollibeeY < item.y &&
-      jollibeeY + jollibeeHeight > item.y - jollibeeSize
+      jollibee.x + jollibee.width > item.x - scrollX &&
+      jollibee.x < item.x - scrollX + 40 &&
+      jollibee.y < item.y &&
+      jollibee.y + jollibee.height > item.y - 40
     ) {
       score += item.value;
       item.collected = true;
@@ -157,61 +185,70 @@ function checkCollision() {
         text: (item.value > 0 ? "+" : "") + item.value + "pt",
         x: item.x,
         y: item.y,
+        value: item.value,
         alpha: 1.0
       });
     }
   });
 
-  if (jollibeeY + jollibeeHeight > canvas.height || jollibeeY < 0) {
+  // 地面 or 天井
+  if (jollibee.y < 0 || jollibee.y + jollibee.height > canvas.height) {
     gameOver = true;
+  }
+
+  // ゴール判定
+  if (jollibee.x + scrollX >= worldWidth - 200) {
+    clear = true;
   }
 }
 
 function update() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackground();
 
   if (!gameStarted) {
-    drawText('Flappy Jollibee 🍗🍝🍔', canvas.height * 0.06, canvas.height * 0.25);
-    drawText('🍗 +100  🍝 +5  🍔 -200', canvas.height * 0.035, canvas.height * 0.33);
-    drawText('画面タップでスタート', canvas.height * 0.035, canvas.height * 0.4);
+    drawText("Flappy Jollibee 🏁", 48, canvas.height * 0.3);
+    drawText("ゴールのJollibee店舗を目指せ！", 24, canvas.height * 0.4);
+    drawText("画面をタップしてスタート", 20, canvas.height * 0.48);
     requestAnimationFrame(update);
     return;
   }
 
   if (!gameOver && !clear) {
-    velocity += gravity;
-    jollibeeY += velocity;
+    jollibee.velocity += gravity;
+    jollibee.y += jollibee.velocity;
+    scrollX += pipeSpeed;
 
-    pipes.forEach(pipe => pipe.x -= pipeSpeed);
-    items.forEach(item => item.x -= pipeSpeed);
-
-    if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - canvas.width / 2) {
-      spawnPipe();
-    }
-
-    pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
-    items = items.filter(item => item.x + jollibeeSize > 0 && !item.collected);
+    pipes.forEach(pipe => pipe.x -= 0);
+    items.forEach(item => item.x -= 0);
     floatingTexts.forEach(text => {
       text.y -= 1;
       text.alpha -= 0.02;
     });
-    floatingTexts = floatingTexts.filter(text => text.alpha > 0);
 
     checkCollision();
+
+    if (pipes.length === 0 || pipes[pipes.length - 1].x - scrollX < canvas.width / 2) {
+      spawnPipe();
+    }
+
+    pipes.filter(pipe => pipe.x - scrollX + pipeWidth > 0);
+    items.filter(item => item.x - scrollX + 40 > 0);
+    floatingTexts.filter(text => text.alpha > 0);
   }
 
-  drawJollibee();
+  drawGoal();
   drawPipes();
   drawItems();
   drawFloatingTexts();
-  drawText(`スコア: ${score} pt`, canvas.height * 0.035, canvas.height * 0.08);
+  drawJollibee();
+  drawText(`スコア: ${score} pt`, 24, 40);
 
   if (gameOver) {
-    drawText('GAME OVER', canvas.height * 0.06, canvas.height / 2);
+    drawText("GAME OVER", 40, canvas.height / 2);
     showRestartButton();
-  } else if (score >= goalScore && !clear) {
-    clear = true;
-    drawText('🎉 マニラで待ってるぞ！🎉', canvas.height * 0.06, canvas.height / 2);
+  } else if (clear) {
+    drawText("🎉 マニラに到着！", 40, canvas.height / 2);
     showRestartButton();
   }
 
@@ -221,42 +258,37 @@ function update() {
 function jump() {
   if (!gameStarted) {
     gameStarted = true;
-    pipes = [];
-    items = [];
-    floatingTexts = [];
     score = 0;
+    jollibee.velocity = 0;
+    jollibee.y = canvas.height / 2;
+    pipes.length = 0;
+    items.length = 0;
+    floatingTexts.length = 0;
+    scrollX = 0;
+    gameOver = false;
+    clear = false;
   }
 
   if (!gameOver && !clear) {
-    velocity = jumpStrength;
+    jollibee.velocity = jumpStrength;
   }
 }
 
 function showRestartButton() {
-  restartButton.style.display = 'block';
+  restartButton.style.display = "block";
 }
 function hideRestartButton() {
-  restartButton.style.display = 'none';
+  restartButton.style.display = "none";
 }
 function restartGame() {
-  jollibeeY = canvas.height / 2;
-  velocity = 0;
-  pipes = [];
-  items = [];
-  floatingTexts = [];
-  score = 0;
-  gameOver = false;
-  clear = false;
-  gameStarted = false;
   hideRestartButton();
+  gameStarted = false;
 }
 
-canvas.addEventListener('touchstart', jump);
-restartButton.addEventListener('click', restartGame);
-jollibeeImg.onload = () => {
-  update();
-};
+canvas.addEventListener("touchstart", jump);
+restartButton.addEventListener("click", restartGame);
+
+jollibeeImg.onload = () => update();
 </script>
 </body>
 </html>
-
